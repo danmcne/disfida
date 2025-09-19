@@ -38,10 +38,10 @@ Reduce your opponent's health to ≤0. If both players reach 0 simultaneously, i
 ### Card Roles & Values
 | Suit | Base Role | Value |
 |------|-----------|-------|
-| **Coins (Denari)** | Shield (defense) | A=11, 2-7, Face=10 |
-| **Cups (Coppe)** | Heal (restore HP) | A=11, 2-7, Face=10 |
-| **Swords (Spade)** | Attack (damage) | A=11, 2-7, Face=10 |
-| **Clubs (Bastoni)** | Attack (damage) | A=11, 2-7, Face=10 |
+| **Coins (Denari)** | Shield (defense) | A=11, 2-7 |
+| **Cups (Coppe)** | Heal (restore HP) | A=11, 2-7 |
+| **Swords (Spade)** | Attack (damage) | A=11, 2-7 |
+| **Clubs (Bastoni)** | Attack (damage) | A=11, 2-7 |
 
 ### Character Bonuses
 | Character | Bonus |
