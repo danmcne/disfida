@@ -1,6 +1,6 @@
 # Disfida
 
-A strategic two-player card combat game built with the 40-card Italian/Neapolitan deck (but easily adapted to French cards with spades (spade), hearts (coppe), clubs (mazze), and diamonds (denari)). Inspired by traditional Italian card games but reimagined as a tactical duel where players use **characters**, **suit specials**, and **combos** to outmaneuver their opponent and reduce their health to zero.
+A strategic two-player card combat game built with the 40-card Italian/Neapolitan deck (but easily adapted to French cards with spades (spade), hearts (coppe), clubs (bastoni), and diamonds (denari)). Inspired by traditional Italian card games but reimagined as a tactical duel where players use **characters**, **suit specials**, and **combos** to outmaneuver their opponent and reduce their health to zero.
 
 
 ## 🎮 Game Overview
@@ -13,6 +13,7 @@ A strategic two-player card combat game built with the 40-card Italian/Neapolita
 - **Suit specials**: Coins offer more cards, Swords sacrifice health for power, Cups share blessings, Clubs adapt to any role
 - **Combo system**: Play sequences of your character's suit + 1 wildcard card
 - **Shield mechanics**: Visible defense cards that persist until destroyed, then cycle back to your deck
+- **Mechanics still under development**: In the current description the game can be a little slow. I will probably add more combo possibilities.
 
 ### Win Condition
 Reduce your opponent's health to ≤0. If both players reach 0 simultaneously, it's a **tie**!
@@ -24,13 +25,13 @@ Reduce your opponent's health to ≤0. If both players reach 0 simultaneously, i
 2. **Deck Building**: 
    - Standard characters: 12-card stack, 4-card starting hand
    - Coins character: 13-card stack, 5-card starting hand (Wealth of Choice)
-3. **Pre-game**: Player 0 may play one shield (Coins or Clubs special) before normal play begins
+3. **Pre-game**: Players may play one shield (Coins or Clubs special) before normal play begins
 4. **Starting Health**: Both players begin at 40 HP (capped at 40)
 
 ### Turn Structure
 1. **Play Phase**: 
    - Skip your turn
-   - Play one card
+   - Play one card (normal or special)
    - Play a combo (sequence of your character's suit + optional 1 non-suit card)
 2. **Resolution**: Cards resolve in order (attacks vs shields, heals restore HP, shields add defense)
 3. **Draw Phase**: Refill hand to starting size (4 or 5 cards)
@@ -54,20 +55,20 @@ Reduce your opponent's health to ≤0. If both players reach 0 simultaneously, i
 | Suit | Special | Effect |
 |------|---------|--------|
 | **Coins** | **Wealth of Choice** | +1 card in stack and hand (passive) |
-| **Swords** | **Blood Price** | Use Cups as attacks (ignore shields, take floor(value/2) self-damage) |
-| **Cups** | **Charity's Burden** | Use Swords as healing (opponent gains floor(value/2) HP) |
+| **Swords** | **Blood Price** | Use Cups as attacks (ignore shields(?), take floor(value/2) self-damage) |
+| **Cups** | **Charity's Burden** | Use Swords as healing (opponent also gains floor(value/2) HP) |
 | **Clubs** | **Iron Versatility** | Clubs can be used as attack OR shield (choice at play) |
 
 ## 🛡️ Shield Mechanics
 
 Shields are **visible cards on the table** that provide persistent defense:
 
-1. **Playing Shields**: Coins cards or Clubs (with special) add defense during your turn
+1. **Playing Shields**: Coins cards or Clubs (with special for Clubs Heroes) add defense during your turn
 2. **Attack Resolution**: When attacked, shields are destroyed from **smallest to largest** until cumulative defense ≥ attack value
 3. **Destruction**: Destroyed shields cycle to the bottom of your deck (not discarded)
 4. **Character Bonus**: King's +2 defense applies to each active shield dynamically
 
-**Example**: King with shields 3 coin (diamond) and 7 coin (diamond) has effective defense of 5 and 9 respectively.
+**Example**: King with shields 3 coins (diamonds) and 7 coins (diamonds) has effective defense of 5 and 9 respectively.
 
 ## ⚔️ Combat Resolution
 
@@ -78,12 +79,18 @@ vs Shields: 3♢ (3+2=5), 7♢ (7+2=9)
 
 Step 1: 8 - 5 = 3 remaining
 Step 2: 3 - 9 = -6 (success!)
-Result: Attack fully blocked, 3♢ shield destroyed and cycled
+Result: Attack fully blocked, both shields destroyed and cycled
 ```
+Another example, both Heroes being Fante/Pages, and therefor no bonuses for attack or defense:
 
-### Special Attacks
-- **Blood Price**: Swords character plays Cup as attack → ignores shields, takes self-damage
-- **Iron Versatility**: Clubs character chooses attack or shield mode for Club cards
+```
+Attack Value: 2♠
+vs Shields: 3♢, 7♢
+
+Step 1: 2 - 3 = -1 (successfully blocked by smallest shield)
+
+Result: Attack fully blocked, 3♢ destroyed and cycled, 7♢ undamaged and remains
+```
 
 ## 🎮 CLI Controls
 
@@ -164,7 +171,7 @@ python -m disfida
 1. **Rules Summary**: Brief rules displayed
 2. **Character Assignment**: Random face cards assigned (Fante/Cavallo/Re of suits)
 3. **Initial Deal**: Stacks and hands built (Coins gets bonus cards)
-4. **Player 0 Pre-shield**: Optional single shield play before turn 1
+4. **Players Pre-shield**: Optional single shield play before turn 1
 5. **Turn 1**: Player 1 begins normal play
 
 ## 🎨 UI/UX Features
