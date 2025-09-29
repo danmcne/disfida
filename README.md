@@ -1,5 +1,7 @@
 # Disfida
 
+(NOTE THAT THE GUI VERSION MAY HAVE IMAGES WHICH ARE COPYRIGHTED. CLEARLY THESE ARE ONLY MEANT AS PLACEHOLDERS FOR PERSONAL USE, NOT FOR A SALEABLE VERSION OF THE GAME.)
+
 A strategic two-player card combat game built with the 40-card Italian/Neapolitan deck (but easily adapted to French cards with spades (spade), hearts (coppe), clubs (bastoni), and diamonds (denari)). Inspired by traditional Italian card games but reimagined as a tactical duel where players use **characters**, **suit specials**, and **combos** to outmaneuver their opponent and reduce their health to zero.
 
 
@@ -143,6 +145,18 @@ cd italian-card-combat
 python disfida.py
 ```
 
+### GUI Quick Start
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/italian-card-combat.git
+cd italian-card-combat/disfida-gui
+
+# Run the game
+python main.py
+```
+
+
+
 ### Development
 ```bash
 # Install dependencies (none required!)
@@ -241,6 +255,7 @@ Result: 2♢ and 5♢ destroyed, 7♠ survives
 - [x] Character bonuses and suit specials
 - [x] Combo validation and resolution
 - [x] CLI interface with full state display
+- [x] Simple GUI version
 - [ ] AI opponent
 - [ ] Character selection screen
 - [ ] Save/load game state
