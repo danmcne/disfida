@@ -35,9 +35,28 @@ class Player:
         self.shields = []
         self.health = 40
         self.turns_played = 0
+        self.discard_pile = []
 
 MAX_PLAYER_TURNS = 20
 RESOLUTION = "hp_winner_player2_tie"
+
+# Allied suit pairs for cross-combos:
+#   Spade + Coppe  (Swords+Cups)
+#   Bastoni + Denari  (Clubs+Coins)
+ALLIED_SUITS = {
+    "Spade":   {"Spade", "Coppe"},
+    "Coppe":   {"Spade", "Coppe"},
+    "Bastoni": {"Bastoni", "Denari"},
+    "Denari":  {"Bastoni", "Denari"},
+}
+
+def last_two_rank_match(cards):
+    """True if the last two cards share the same rank AND that rank is not Ace.
+    Aces are already the strongest card; doubling them is too powerful.
+    """
+    if len(cards) < 2:
+        return False
+    return cards[-1].rank == cards[-2].rank and cards[-1].rank != "A"
 
 def build_numeric_deck():
     suits = ["Denari", "Coppe", "Spade", "Bastoni"]
@@ -52,28 +71,59 @@ def create_face_cards():
 
 def get_rules_summary():
     rules = [
-        "=" * 50,
-        "ITALIAN CARD COMBAT - TOURNAMENT RULES",
-        "=" * 50,
-        "OBJECTIVE: Reduce opponent's HP to 0 or survive 40 turns with more HP",
-        f"TURN LIMIT: {MAX_PLAYER_TURNS} turns each (40 total)",
-        f"RESOLUTION: Higher HP wins. Exact tie: Player 2 wins!",
-        "DECK: 40-card Italian deck (A=11, 2-7, Fante/Cavallo/Re=10)",
-        "START: 40 HP each, 4-card hand (5 for Coins char)",
-        "\nCHARACTERS & BONUSES:",
-        "• Re (King): +2 defense per shield",
-        "• Cavallo (Knight): +1 attack per attack card",
-        "• Fante (Page): +2 healing per healing card",
-        "\nSUIT SPECIALS:",
-        "• Coins: Wealth of Choice - +1 card in stack/hand (passive)",
-        "• Swords: Blood Price - Use Cups as attacks (ignore shields, self-damage)",
-        "• Cups: Charity's Burden - Use Swords as healing (opponent gains half)",
-        "• Clubs: Iron Versatility - Clubs can be attack OR shield",
-        "\nCOMBOS: Sequence of character-suit cards + optional 1 non-suit card",
-        "TURNS: Skip, play 1 card, or play combo. Draw to hand size at turn end",
-        "SHIELDS: Visible on table, destroyed smallest→largest, cycle to deck bottom",
-        "ENDGAME: After 40 turns, higher HP wins. Exact tie = Player 2 wins!",
-        "=" * 50
+        "=" * 54,
+        "         DISFIDA — TOURNAMENT RULES",
+        "=" * 54,
+        "",
+        "OBJECTIVE",
+        "  Reduce your opponent's HP to 0.",
+        f"  If neither falls in {MAX_PLAYER_TURNS} turns each, higher HP wins.",
+        "  Exact HP tie at end: Player 2 wins.",
+        "",
+        "THE CARDS",
+        "  Uses the 40-card Italian deck (or French equivalent).",
+        "  Face cards (Fante/Cavallo/Re) are character cards only —",
+        "  they are NOT part of the playing deck.",
+        "  Playing deck: A=11, 2–7 (face value). Split between players.",
+        "  Coins (Denari / ♦) = Shield   Cups (Coppe / ♥) = Heal",
+        "  Swords (Spade / ♠) = Attack   Clubs (Bastoni / ♣) = Attack",
+        "",
+        "CHARACTERS & BONUSES",
+        "  Re   (King):   +2 to effective defense of each shield",
+        "  Cavallo (Knight): +1 to each attack",
+        "  Fante (Page):  +2 to each heal; reduces Poison Cup self-damage by 2",
+        "",
+        "SUIT SPECIALS",
+        "  Coins:  Wealth of Choice — +1 card in stack and opening hand (passive)",
+        "  Swords or Cups: Poison Cup — play a Cups card as an attack:",
+        "            • Ignores opponent's shields",
+        "            • Self-damage = floor(card value / 2)",
+        "            • Fante's heal bonus reduces self-damage (min 0)",
+        "            • The Cups card is ALWAYS permanently removed after use",
+        "  Clubs:  Iron Versatility — play a Clubs card as attack OR shield (you choose)",
+        "",
+        "COMBOS",
+        "  Allied pairs:  Swords + Cups (♠/♥)  |  Clubs + Coins (♣/♦)",
+        "  A combo = any allied-suit cards + at most 1 wildcard from any other suit.",
+        "  Each card plays its normal role (Coins=shield, Cups=heal, others=attack).",
+        "",
+        "RANK-MATCH BONUS",
+        "  If the last two cards of your combo share the same rank (2–7 only, not Ace),",
+        "  the LAST card's effect is doubled.",
+        "  Example: play 5♠ then 5♥ — the 5♥ heals for double value.",
+        "  (Ordering matters: put the card you want doubled in the final position.)",
+        "",
+        "CARD DESTRUCTION (ineffective cards permanently leave the game)",
+        "  Attack fully blocked by shields → attack card destroyed",
+        "  Shield overwhelmed (attack continues past it) → shield destroyed",
+        "  Shield that stops the attack → cycles to bottom of deck",
+        "  Heal that doesn't restore player to full health (40 HP) → heal card destroyed",
+        "  Poison Cup card → always destroyed after use",
+        "",
+        "TURNS",
+        "  Skip, play 1 card, or play a combo.",
+        "  Draw back to hand size at end of turn.",
+        "=" * 54,
     ]
     return "\n".join(rules)
 
@@ -82,7 +132,7 @@ def draw_cards(player, n):
     drawn_cards = []
     for _ in range(n):
         if player.stack:
-            card = player.stack.pop(0)  # Remove from top
+            card = player.stack.pop(0)
             player.hand.append(card)
             drawn_cards.append(card)
             drawn += 1
@@ -91,93 +141,119 @@ def draw_cards(player, n):
     return drawn, drawn_cards
 
 def validate_combo(actions, player):
+    """Allied-suit cards + at most 1 wildcard from any other suit.
+    Single-card plays always valid.
+    """
     if len(actions) == 0:
         return False
     cards = [player.hand[idx] for idx, _ in actions]
     if len(cards) == 1:
         return True
-    character_suit = player.character.suit
-    non_suit_count = 0
-    for i, card in enumerate(cards):
-        if i < len(cards) - 1:
-            if card.suit != character_suit:
-                return False
-        else:
-            if card.suit != character_suit:
-                non_suit_count += 1
-    return non_suit_count <= 1
-
+    allied = ALLIED_SUITS[player.character.suit]
+    non_allied = [c for c in cards if c.suit not in allied]
+    # At most 1 wildcard, and at least 1 allied-suit card
+    return len(non_allied) <= 1 and (len(cards) - len(non_allied)) >= 1
 
 def move_card_to_bottom(player, card):
-    # Ensure card is not already in stack to prevent duplicates
     if card not in player.stack:
         player.stack.append(card)
 
+def discard_card(player, card):
+    player.discard_pile.append(card)
+
 def remove_shields_for_attack(opponent, attack_value):
+    """Process shields smallest->largest until attack is stopped or all are consumed.
+
+    Destruction rules:
+      - Shields overwhelmed by the attack (attack continues past them) -> DESTROYED
+      - The one shield that finally stops the attack -> cycles to bottom of deck
+      - If the attack breaks through everything, all shields consumed are destroyed
+    """
     if not opponent.shields:
-        return attack_value, []
+        return attack_value, [], False
     remaining = attack_value
     sorted_shields = sorted(opponent.shields, key=lambda c: c.value)
-    removed_shields = []
+    summary = []
+    attack_got_through = False
+
     for shield in sorted_shields:
         effective_defense = shield.value + opponent.character.defense_bonus
-        remaining -= effective_defense
-        removed_shields.append(shield)
-        if remaining <= 0:
-            break
-    for shield in removed_shields:
         opponent.shields.remove(shield)
-        move_card_to_bottom(opponent, shield)
-    shields_str = ", ".join([str(s) for s in removed_shields]) if removed_shields else ""
-    summary = [f"Shields {shields_str} absorbed attack, sent to bottom of deck"] if removed_shields else []
-    return max(0, remaining), summary
+        remaining -= effective_defense
 
-def apply_heal(player, card, opponent):
+        if remaining <= 0:
+            # This shield stopped the attack -- cycle it back
+            move_card_to_bottom(opponent, shield)
+            summary.append(f"Shield {shield} (def {effective_defense}) blocked the attack, returned to deck")
+            break
+        else:
+            # This shield was overwhelmed -- destroy it permanently
+            discard_card(opponent, shield)
+            summary.append(f"Shield {shield} (def {effective_defense}) overwhelmed and DESTROYED")
+            attack_got_through = True
+
+    return max(0, remaining), summary, attack_got_through
+
+def apply_heal(player, card, opponent, double=False):
+    """Heal player. Card is effective (cycles back) only if it restores the player
+    to full health (40 HP). Otherwise permanently removed.
+    double=True when this card is part of a rank-match bonus pair.
+    """
     turn_summary = []
-    heal_amount = card.value + player.character.heal_bonus
+    base = card.value + player.character.heal_bonus
+    heal_amount = base * 2 if double else base
     player.health = min(40, player.health + heal_amount)
-    opponent_bonus = 0
-    if player.character.suit == "Coppe" and card.suit == "Spade":
-        opponent_bonus = card.value // 2
-        opponent.health = min(40, opponent.health + opponent_bonus)
-        turn_summary.append(f"Heal {card}: +{heal_amount} HP, +{opponent_bonus} to opponent")
-    else:
-        turn_summary.append(f"Heal {card}: +{heal_amount} HP")
-    return heal_amount, opponent_bonus, turn_summary
+    was_effective = (player.health == 40)
+    double_str = " [×2 rank match]" if double else ""
+    destroyed_str = "" if was_effective else " [didn't restore full HP — card DESTROYED]"
+    turn_summary.append(f"Heal {card}: +{heal_amount} HP{double_str}{destroyed_str}")
+    return heal_amount, turn_summary, was_effective
 
-def apply_attack(player, card, opponent, ignore_shields=False):
+def apply_attack(player, card, opponent, ignore_shields=False, double=False):
+    """Apply attack. was_effective = True only if damage reached the opponent.
+    double=True when this card is part of a rank-match bonus pair.
+    """
     turn_summary = []
-    attack_value = card.value + player.character.attack_bonus
-    remaining_damage = attack_value
+    base = card.value + player.character.attack_bonus
+    attack_value = base * 2 if double else base
+    remaining_damage = 0
+    double_str = " [×2 rank match]" if double else ""
     if ignore_shields:
+        remaining_damage = attack_value
         opponent.health -= attack_value
-        turn_summary.append(f"Blood Price {card}: {attack_value} damage (ignores shields)")
+        turn_summary.append(f"Poison Cup {card}: {attack_value} damage (ignores shields){double_str}")
+        was_effective = True
     else:
-        remaining_damage, shield_summary = remove_shields_for_attack(opponent, attack_value)
+        remaining_damage, shield_summary, _ = remove_shields_for_attack(opponent, attack_value)
         turn_summary.extend(shield_summary)
+        was_effective = remaining_damage > 0
         if remaining_damage > 0:
             opponent.health -= remaining_damage
-            turn_summary.append(f"Attack {card}: {attack_value}→{remaining_damage} damage")
+            turn_summary.append(f"Attack {card}: {attack_value}→{remaining_damage} damage{double_str}")
         else:
-            turn_summary.append(f"Attack {card}: {attack_value} blocked by shields")
-    self_damage = 0
-    if player.character.suit == "Spade" and card.suit == "Coppe" and ignore_shields:
-        self_damage = card.value // 2
-        player.health -= self_damage
-        turn_summary.append(f"Blood Price self-damage: -{self_damage} HP")
-    return attack_value, remaining_damage, self_damage, turn_summary
+            turn_summary.append(f"Attack {card}: {attack_value} fully blocked [card DESTROYED]")
+    return attack_value, remaining_damage, turn_summary, was_effective
+
+def apply_poison_cup(player, card, opponent, double=False):
+    turn_summary = []
+    base = card.value + player.character.attack_bonus
+    attack_value = base * 2 if double else base
+    self_damage = max(0, (card.value // 2) - player.character.heal_bonus)
+    opponent.health -= attack_value
+    player.health -= self_damage
+    double_str = " [×2 rank match]" if double else ""
+    turn_summary.append(f"Poison Cup {card}: {attack_value} damage, -{self_damage} self-damage{double_str}")
+    return attack_value, self_damage, turn_summary, True
 
 def apply_shield(player, card):
     effective_value = card.value + player.character.defense_bonus
     player.shields.append(card)
-    return [f"Shield {card}: +{effective_value} defense"]
+    return [f"Shield {card}: +{effective_value} defense"], True
 
 def can_use_special(player, card, special_flag):
     if not special_flag:
         return False
-    if player.character.suit == "Spade" and card.suit == "Coppe":
-        return True
-    elif player.character.suit == "Coppe" and card.suit == "Spade":
+    if (player.character.suit in ["Spade", "Coppe"]) and card.suit == "Coppe":
         return True
     elif player.character.suit == "Bastoni" and card.suit == "Bastoni":
         return True
@@ -204,70 +280,135 @@ def parse_input(inp, player):
             return None
     return actions
 
-def resolve_turn(player, opponent, inp):
+def resolve_turn(player, opponent, inp, rank_match=False, rank_match_shield_bonus=None):
+    """Resolve a player's turn.
+
+    rank_match: True if the GUI detected that the last two played cards share a rank.
+    rank_match_shield_bonus: 'health' or 'attack' — used when one of those last two
+        cards is a shield and the player chose where to redirect the doubled effect.
+
+    Returns (summary: list[str], turn_consumed: bool).
+    turn_consumed is False for invalid input; the GUI should let the player retry.
+    """
     turn_summary = []
     if inp == "0":
         turn_summary.append(f"{player.name} skips turn")
         player.turns_played += 1
-        return turn_summary
+        return turn_summary, True
+
     actions = parse_input(inp, player)
     if actions is None:
-        turn_summary.append("Invalid input")
-        return turn_summary
+        turn_summary.append("Invalid input — please try again.")
+        return turn_summary, False
+
     if not validate_combo(actions, player):
-        turn_summary.append("Invalid combo! Must be character-suit cards + optional 1 non-suit card.")
-        return turn_summary
-    special_error = False
+        allied = sorted(ALLIED_SUITS[player.character.suit])
+        turn_summary.append(f"Invalid combo! Allied suits for {player.character.suit}: {', '.join(allied)}")
+        turn_summary.append("Combos: allied-suit cards + at most 1 wildcard from any other suit.")
+        return turn_summary, False
+
     for idx, special in actions:
         card = player.hand[idx]
         if special and not can_use_special(player, card, special):
             turn_summary.append(f"Error: {card} has no special play for {player.character.face} of {player.character.suit}")
-            special_error = True
-            break
-    if special_error:
-        return turn_summary
+            return turn_summary, False
+
+    # Snapshot cards then remove from hand
     cards_to_play = [(player.hand[idx], special) for idx, special in actions]
     for idx, _ in sorted(actions, key=lambda x: x[0], reverse=True):
         del player.hand[idx]
-    cycled_cards = []
-    for card, special in cards_to_play:
+
+    # Rank-match indices: last two positions if rank_match is active
+    n = len(cards_to_play)
+    rank_match_set = {n - 1} if rank_match and n >= 2 else set()   # last card only
+    if rank_match_set:
+        turn_summary.append("✨ RANK MATCH! Last card is doubled!")
+
+    # Process each card
+    for i, (card, special) in enumerate(cards_to_play):
         was_shield = False
+        card_summary = []
+        was_effective = False
+        double = i in rank_match_set
+
+        # Detect if this doubled card is a shield (so bonus is redirected)
+        is_shield_card = (not special and card.suit == "Denari") or (
+            special and player.character.suit == "Bastoni" and card.suit == "Bastoni"
+            and getattr(card, '_temp_bastoni_choice', 'attack') == 'shield'
+        )
+        apply_shield_bonus = double and is_shield_card and rank_match_shield_bonus in ('health', 'attack')
+
         if special:
-            if player.character.suit == "Bastoni" and card.suit == "Bastoni":
+            if (player.character.suit in ["Spade", "Coppe"]) and card.suit == "Coppe":
+                _, _, strike_summary, was_effective = apply_poison_cup(player, card, opponent, double=double)
+                card_summary.extend(strike_summary)
+                discard_card(player, card)
+                card_summary.append(f"{card} (Poison Cup) permanently removed from game")
+
+            elif player.character.suit == "Bastoni" and card.suit == "Bastoni":
                 choice = getattr(card, '_temp_bastoni_choice', 'attack')
                 if choice == 'attack':
-                    _, remaining, self_dmg, attack_summary = apply_attack(player, card, opponent)
-                    turn_summary.extend(attack_summary)
-                    cycled_cards.append(card)
+                    _, _, attack_summary, was_effective = apply_attack(
+                        player, card, opponent, double=(double and not apply_shield_bonus))
+                    card_summary.extend(attack_summary)
                 else:
-                    turn_summary.extend(apply_shield(player, card))
+                    # Shield play
+                    card_summary, was_effective = apply_shield(player, card)
                     was_shield = True
-            elif player.character.suit == "Spade" and card.suit == "Coppe":
-                _, _, self_dmg, attack_summary = apply_attack(player, card, opponent, ignore_shields=True)
-                turn_summary.extend(attack_summary)
-                cycled_cards.append(card)
-            elif player.character.suit == "Coppe" and card.suit == "Spade":
-                heal_amt, opp_bonus, heal_summary = apply_heal(player, card, opponent)
-                turn_summary.extend(heal_summary)
-                cycled_cards.append(card)
+                    if apply_shield_bonus:
+                        card_summary, was_effective = _apply_rank_match_shield_bonus(
+                            player, opponent, card, rank_match_shield_bonus, card_summary)
         else:
             if card.suit == "Denari":
-                turn_summary.extend(apply_shield(player, card))
+                card_summary, was_effective = apply_shield(player, card)
                 was_shield = True
+                if apply_shield_bonus:
+                    card_summary, was_effective = _apply_rank_match_shield_bonus(
+                        player, opponent, card, rank_match_shield_bonus, card_summary)
             elif card.suit == "Coppe":
-                heal_amt, opp_bonus, heal_summary = apply_heal(player, card, opponent)
-                turn_summary.extend(heal_summary)
-                cycled_cards.append(card)
+                _, heal_summary, was_effective = apply_heal(player, card, opponent, double=double)
+                card_summary.extend(heal_summary)
             else:
-                _, remaining, self_dmg, attack_summary = apply_attack(player, card, opponent)
-                turn_summary.extend(attack_summary)
-                cycled_cards.append(card)
-    for card in cycled_cards:
-        move_card_to_bottom(player, card)
+                _, _, attack_summary, was_effective = apply_attack(
+                    player, card, opponent, double=double)
+                card_summary.extend(attack_summary)
+
+        turn_summary.extend(card_summary)
+
+        # Fate: Poison Cup always discarded (done above); shields stay on table;
+        # others cycle if effective, destroyed if not.
+        if special and card.suit == "Coppe" and player.character.suit in ["Spade", "Coppe"]:
+            continue  # already discarded
+        if was_shield:
+            pass  # lives on player.shields until hit
+        elif was_effective:
+            move_card_to_bottom(player, card)
+        else:
+            discard_card(player, card)
+            turn_summary.append(f"{card} was ineffective — permanently removed from game")
+
     player.turns_played += 1
-    return turn_summary
+    return turn_summary, True
+
+
+def _apply_rank_match_shield_bonus(player, opponent, card, bonus_type, existing_summary):
+    """Apply the redirected rank-match bonus for a shield card.
+    Instead of doubled defense, player takes the bonus as health or direct attack.
+    Returns (updated_summary, was_effective=True).
+    """
+    bonus_value = card.value  # card's raw value (not defense bonus, which is shield-specific)
+    if bonus_type == 'health':
+        old_hp = player.health
+        player.health = min(40, player.health + bonus_value)
+        gained = player.health - old_hp
+        existing_summary.append(f"  Rank match shield bonus → +{gained} HP")
+    else:  # 'attack'
+        opponent.health -= bonus_value
+        existing_summary.append(f"  Rank match shield bonus → {bonus_value} direct damage")
+    return existing_summary, True
 
 def player_pre_shield(player, opponent, inp):
+    """Returns (summary, success). success=False means invalid play; caller should not advance phase."""
     turn_summary = []
     if inp == "0":
         turn_summary.append(f"{player.name} skips pre-shield")
@@ -275,29 +416,31 @@ def player_pre_shield(player, opponent, inp):
         if needed > 0:
             drawn, _ = draw_cards(player, needed)
             turn_summary.append(f"{player.name} draws {drawn} card(s) to hand")
-        return turn_summary
+        return turn_summary, True
     actions = parse_input(inp, player)
     if actions is None or len(actions) != 1:
         turn_summary.append("Invalid: must be exactly ONE card (e.g., '1' or '3s')")
-        return turn_summary
+        return turn_summary, False
     idx, special = actions[0]
     card = player.hand[idx]
     del player.hand[idx]
     if card.suit == "Denari":
-        turn_summary.extend(apply_shield(player, card))
+        summary, _ = apply_shield(player, card)
+        turn_summary.extend(summary)
         turn_summary.append(f"{player.name} plays starting shield: {card}")
     elif special and player.character.suit == "Bastoni" and card.suit == "Bastoni":
-        turn_summary.extend(apply_shield(player, card))
+        summary, _ = apply_shield(player, card)
+        turn_summary.extend(summary)
         turn_summary.append(f"{player.name} plays starting shield {card} (Club special)")
     else:
-        turn_summary.append(f"Invalid: {card} cannot be played as a shield")
+        turn_summary.append(f"Invalid: {card} cannot be played as a shield here")
         player.hand.insert(idx, card)
-        return turn_summary
+        return turn_summary, False
     needed = player.character.hand_size - len(player.hand)
     if needed > 0:
         drawn, _ = draw_cards(player, needed)
         turn_summary.append(f"{player.name} draws {drawn} card(s) to reach full hand size")
-    return turn_summary
+    return turn_summary, True
 
 def check_victory(p1, p2):
     if p1.health <= 0 and p2.health <= 0:
@@ -321,7 +464,7 @@ def resolve_tournament_end(p1, p2):
         summary.append(f"🏆 PLAYER 1 WINS BY SURVIVAL! ({p1.health} > {p2.health} HP)")
         return p1, summary
     elif p2.health > p1.health:
-        summary.append(f"🏆 PLAYER 2 WINS BY SURVIVAL! ({p2.health} > {p2.health} HP)")
+        summary.append(f"🏆 PLAYER 2 WINS BY SURVIVAL! ({p2.health} > {p1.health} HP)")
         return p2, summary
     else:
         summary.append(f"⚖️ EXACT HEALTH TIE ({p1.health} HP each)!")
@@ -356,7 +499,6 @@ def init_game():
         available_cards = available_cards[:total_needed]
     p1_stack = available_cards[:p1_character.stack_size]
     p2_stack = available_cards[p1_character.stack_size:p1_character.stack_size + p2_character.stack_size]
-    # Ensure no duplicates between stacks
     if any(card in p2_stack for card in p1_stack):
         random.shuffle(available_cards)
         p1_stack = available_cards[:p1_character.stack_size]
