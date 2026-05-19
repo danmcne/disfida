@@ -318,9 +318,16 @@ def resolve_turn(player, opponent, inp, rank_match=False, rank_match_shield_bonu
     for idx, _ in sorted(actions, key=lambda x: x[0], reverse=True):
         del player.hand[idx]
 
-    # Rank-match indices: last two positions if rank_match is active
+    # Rank-match: last card only, and never for Aces.
+    # The defensive Ace check here catches any case where rank_match=True was
+    # passed incorrectly (e.g. from an older GUI version).
     n = len(cards_to_play)
-    rank_match_set = {n - 1} if rank_match and n >= 2 else set()   # last card only
+    last_card_rank = cards_to_play[-1][0].rank if cards_to_play else None
+    rank_match_set = (
+        {n - 1}
+        if rank_match and n >= 2 and last_card_rank != "A"
+        else set()
+    )
     if rank_match_set:
         turn_summary.append("✨ RANK MATCH! Last card is doubled!")
 
