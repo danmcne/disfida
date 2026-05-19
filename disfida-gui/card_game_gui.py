@@ -14,8 +14,8 @@ BTN_BG     = "#2d6a4f"
 BTN_ACTIVE = "#40916c"
 
 CARD_W, CARD_H = 80, 132    # fixed card image dimensions
-AI_CARD_DELAY  = 250         # ms per card during AI animation
-AI_RESOLVE_DELAY = 350       # ms pause after last card before resolving
+AI_CARD_DELAY  = 500         # ms per card during AI animation
+AI_RESOLVE_DELAY = 700       # ms pause after last card before resolving
 
 
 class CardGameGUI:
@@ -232,19 +232,18 @@ class CardGameGUI:
         if messagebox.askokcancel("Quit", "Quit Disfida?"):
             self.root.destroy()
 
-    def ask_choice(self, title, option1, option2):
-        """Minimal dialog: title bar + two large buttons.  TclError-safe.
-        Sets _dialog_active while waiting so select_card ignores stray clicks.
-        The Rules window deliberately does NOT use this method, so card clicks
-        behind the rules popup remain unblocked.
+    def ask_choice(self, title, *options):
+        """Dialog with title bar + one button per option.  TclError-safe.
+        Sets _dialog_active while open so select_card ignores stray clicks.
+        Accepts 2 or 3 options (or more).
         """
-        result = [option1]
+        result = [options[0]]
         self._dialog_active = True
         try:
             dlg = tk.Toplevel(self.root)
         except tk.TclError:
             self._dialog_active = False
-            return option1
+            return options[0]
         try:
             dlg.title(title)
             dlg.configure(bg=PANEL_BG)
@@ -261,10 +260,10 @@ class CardGameGUI:
                 result[0] = v
                 dlg.destroy()
 
-            tk.Button(frm, text=option1,
-                      command=lambda: pick(option1), **btn_cfg).pack(side="left", padx=10)
-            tk.Button(frm, text=option2,
-                      command=lambda: pick(option2), **btn_cfg).pack(side="left", padx=10)
+            for opt in options:
+                tk.Button(frm, text=opt,
+                          command=lambda v=opt: pick(v), **btn_cfg).pack(
+                    side="left", padx=10)
 
             dlg.update_idletasks()
             dlg.lift()
@@ -528,7 +527,7 @@ class CardGameGUI:
     def _choose_game_mode(self):
         mode = self.ask_choice("Game Mode", "Two Players", "vs Computer")
         if mode == "vs Computer":
-            diff         = self.ask_choice("Difficulty", "Normal", "Easy")
+            diff = self.ask_choice("Difficulty", "Hard", "Normal", "Easy")
             self.ai      = DisfidaAI(difficulty=diff.lower())
             self.ai_mode = True
             self.log_messages(
